@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     database_url: str
     propublica_api_base_url: str = "https://projects.propublica.org/nonprofits/api/v2"
     debug: bool = False
+    firecrawl_api_key: str
+    apollo_api_key: str
 
     class Config:
         env_file = ".env"

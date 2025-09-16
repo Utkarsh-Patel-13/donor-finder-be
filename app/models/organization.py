@@ -40,5 +40,10 @@ class Organization(Base):
         "Filing", back_populates="organization", cascade="all, delete-orphan"
     )
 
+    # Relationship to enrichment data
+    enrichment = relationship(
+        "OrganizationEnrichment", back_populates="organization", uselist=False
+    )
+
     def __repr__(self):
         return f"<Organization(ein={self.ein}, name='{self.name}')>"

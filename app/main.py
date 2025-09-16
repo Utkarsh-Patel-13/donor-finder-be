@@ -5,7 +5,8 @@ from sqlalchemy import text
 from app.models.database import engine, get_db
 from app.models.organization import Organization
 from app.models.filing import Filing
-from app.routers import organizations, sync, semantic_search
+from app.models.enrichment import OrganizationEnrichment
+from app.routers import organizations, sync, semantic_search, enrichment
 from app.services.database_service import DatabaseService
 from app.schemas.filing import Filing as FilingSchema
 from typing import List
@@ -18,6 +19,7 @@ logger = logging.getLogger(__name__)
 # Create database tables
 Organization.metadata.create_all(bind=engine)
 Filing.metadata.create_all(bind=engine)
+OrganizationEnrichment.metadata.create_all(bind=engine)
 
 # Initialize pgvector extension
 try:
@@ -30,7 +32,7 @@ except Exception as e:
 
 app = FastAPI(
     title="Donor Finder API",
-    description="API for finding and managing nonprofit donor/foundation data with semantic search",
+    description="API for finding and managing nonprofit donor/foundation data with semantic search and enrichment",
     version="1.0.0",
 )
 
@@ -47,13 +49,14 @@ app.add_middleware(
 app.include_router(organizations.router, prefix="/api/v1")
 app.include_router(sync.router, prefix="/api/v1")
 app.include_router(semantic_search.router, prefix="/api/v1")
+app.include_router(enrichment.router, prefix="/api/v1")
 
 
 @app.get("/")
 async def root():
     """Root endpoint with API information."""
     return {
-        "message": "Donor Finder API with Semantic Search",
+        "message": "Donor Finder API with Semantic Search & Enrichment",
         "version": "1.0.0",
         "docs": "/docs",
         "endpoints": {
@@ -65,6 +68,11 @@ async def root():
             "search_suggestions": "/api/v1/semantic-search/suggest",
             "update_embeddings": "/api/v1/semantic-search/update-embeddings",
             "explain_query": "/api/v1/semantic-search/explain",
+            "enrich_organization": "/api/v1/enrichment/organization/{organization_id}",
+            "get_enrichment": "/api/v1/enrichment/organization/{organization_id}",
+            "enrichment_status": "/api/v1/enrichment/organization/{organization_id}/status",
+            "enrichment_stats": "/api/v1/enrichment/stats",
+            "bulk_enrich": "/api/v1/enrichment/bulk-enrich",
         },
         "examples": {
             "semantic_search": [
@@ -72,7 +80,19 @@ async def root():
                 "environmental organizations in New York",
                 "disaster relief nonprofits",
                 "youth development programs in Texas",
-            ]
+            ],
+            "enrichment": {
+                "description": "Enrich organizations with website data (Firecrawl) and contact data (Apollo.io)",
+                "process": [
+                    "1. Scrape organization website for leadership and contact info",
+                    "2. Enrich contact data using Apollo.io B2B database",
+                    "3. Store enriched data for profile enhancement",
+                ],
+                "api_keys_required": {
+                    "firecrawl": "Get from https://firecrawl.dev (free: 500 scrapes/month)",
+                    "apollo": "Get from https://apollo.io (free: 100 enrichments/month)",
+                },
+            },
         },
     }
 
@@ -83,7 +103,7 @@ async def health_check(db: Session = Depends(get_db)):
     try:
         db_service = DatabaseService(db)
         # Simple database connectivity check
-        db.execute("SELECT 1")
+        db.execute(text("SELECT 1"))
         return {"status": "healthy", "database": "connected"}
     except Exception as e:
         return {"status": "unhealthy", "error": str(e)}
@@ -96,6 +116,7 @@ async def get_stats(db: Session = Depends(get_db)):
 
     org_count = db.query(Organization).count()
     filing_count = db.query(Filing).count()
+    enrichment_count = db.query(OrganizationEnrichment).count()
 
     # Get stats by state
     state_stats = (
@@ -105,9 +126,32 @@ async def get_stats(db: Session = Depends(get_db)):
         .all()
     )
 
+    # Get enrichment stats
+    enriched_orgs = (
+        db.query(OrganizationEnrichment)
+        .filter(OrganizationEnrichment.enrichment_status == "completed")
+        .count()
+    )
+
+    website_scraped = (
+        db.query(OrganizationEnrichment)
+        .filter(OrganizationEnrichment.website_scraped == True)
+        .count()
+    )
+
+    apollo_enriched = (
+        db.query(OrganizationEnrichment)
+        .filter(OrganizationEnrichment.apollo_enriched == True)
+        .count()
+    )
+
     return {
         "total_organizations": org_count,
         "total_filings": filing_count,
+        "total_enrichments": enrichment_count,
+        "enriched_organizations": enriched_orgs,
+        "website_scraped": website_scraped,
+        "apollo_enriched": apollo_enriched,
         "organizations_by_state": {state: count for state, count in state_stats},
     }
 
