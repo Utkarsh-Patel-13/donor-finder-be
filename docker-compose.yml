@@ -19,6 +19,30 @@ services:
       timeout: 5s
       retries: 5
 
+  app:
+    build: .
+    container_name: donor_finder_app
+    environment:
+      DATABASE_URL: postgresql://donor_user:donor_password@db:5432/donor_finder_db
+      PROPUBLICA_API_BASE_URL: https://projects.propublica.org/nonprofits/api/v2
+      DEBUG: "true"
+      # Set these in your .env file or override here
+      FIRECRAWL_API_KEY: ${FIRECRAWL_API_KEY:-your_firecrawl_api_key}
+      APOLLO_API_KEY: ${APOLLO_API_KEY:-your_apollo_api_key}
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - .:/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
 volumes:
   postgres_data:
