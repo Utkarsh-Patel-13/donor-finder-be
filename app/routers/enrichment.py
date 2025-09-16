@@ -133,12 +133,10 @@ async def enrich_organization_by_ein(
         await enrichment_service.close()
 
 
-@router.get("/organization/{organization_id}", response_model=EnrichmentResponse)
-async def get_organization_enrichment(
-    organization_id: int, db: Session = Depends(get_db)
-):
+@router.get("/organization/ein/{ein}", response_model=EnrichmentResponse)
+async def get_organization_enrichment(ein: int, db: Session = Depends(get_db)):
     """
-    Get enriched data for a specific organization.
+    Get enriched data for a specific organization by EIN.
 
     Returns comprehensive enrichment data including:
     - Apollo.io organization search and enrichment results
@@ -147,17 +145,15 @@ async def get_organization_enrichment(
     - Recent news, grants, or announcements
     - Apollo.io company and contact data
     """
-    # Verify organization exists
-    organization = (
-        db.query(Organization).filter(Organization.id == organization_id).first()
-    )
+    # Find organization by EIN
+    organization = db.query(Organization).filter(Organization.ein == ein).first()
 
     if not organization:
         raise HTTPException(status_code=404, detail="Organization not found")
 
     # Get enrichment data
     enrichment_service = EnrichmentService(db)
-    enriched_data = enrichment_service.get_enriched_data(organization_id)
+    enriched_data = enrichment_service.get_enriched_data(organization.id)
 
     if not enriched_data:
         raise HTTPException(
@@ -168,33 +164,31 @@ async def get_organization_enrichment(
     return EnrichmentResponse(**enriched_data)
 
 
-@router.get("/organization/{organization_id}/status", response_model=EnrichmentStatus)
-async def get_enrichment_status(organization_id: int, db: Session = Depends(get_db)):
-    """Get the current enrichment status for an organization."""
+@router.get("/organization/ein/{ein}/status", response_model=EnrichmentStatus)
+async def get_enrichment_status(ein: int, db: Session = Depends(get_db)):
+    """Get the current enrichment status for an organization by EIN."""
+    # Find organization by EIN
+    organization = db.query(Organization).filter(Organization.ein == ein).first()
+
+    if not organization:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
     enrichment = (
         db.query(OrganizationEnrichment)
-        .filter(OrganizationEnrichment.organization_id == organization_id)
+        .filter(OrganizationEnrichment.organization_id == organization.id)
         .first()
     )
 
     if not enrichment:
-        # Check if organization exists
-        organization = (
-            db.query(Organization).filter(Organization.id == organization_id).first()
-        )
-
-        if not organization:
-            raise HTTPException(status_code=404, detail="Organization not found")
-
         return EnrichmentStatus(
             status="not_enriched",
-            organization_id=organization_id,
+            organization_id=organization.id,
             message="Organization has not been enriched yet",
         )
 
     return EnrichmentStatus(
         status=enrichment.enrichment_status,
-        organization_id=organization_id,
+        organization_id=organization.id,
         enrichment_id=enrichment.id,
         message=enrichment.error_message
         if enrichment.enrichment_status == "failed"
@@ -202,14 +196,18 @@ async def get_enrichment_status(organization_id: int, db: Session = Depends(get_
     )
 
 
-@router.delete("/organization/{organization_id}")
-async def delete_organization_enrichment(
-    organization_id: int, db: Session = Depends(get_db)
-):
-    """Delete enrichment data for an organization."""
+@router.delete("/organization/ein/{ein}")
+async def delete_organization_enrichment(ein: int, db: Session = Depends(get_db)):
+    """Delete enrichment data for an organization by EIN."""
+    # Find organization by EIN
+    organization = db.query(Organization).filter(Organization.ein == ein).first()
+
+    if not organization:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
     enrichment = (
         db.query(OrganizationEnrichment)
-        .filter(OrganizationEnrichment.organization_id == organization_id)
+        .filter(OrganizationEnrichment.organization_id == organization.id)
         .first()
     )
 
@@ -223,7 +221,8 @@ async def delete_organization_enrichment(
 
     return {
         "message": "Enrichment data deleted successfully",
-        "organization_id": organization_id,
+        "organization_id": organization.id,
+        "ein": ein,
     }
 
 
