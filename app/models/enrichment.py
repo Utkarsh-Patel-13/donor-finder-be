@@ -35,14 +35,20 @@ class OrganizationEnrichment(Base):
     # Apollo.io enrichment data
     apollo_company_data = Column(JSON)  # Company information from Apollo
     apollo_contacts = Column(JSON)  # Contact information from Apollo
+    apollo_news_articles = Column(JSON)  # News articles from Apollo
+    apollo_search_results = Column(JSON)  # Raw search results from Apollo
+    apollo_enrichment_metadata = Column(JSON)  # Credits used, errors, etc.
 
     # Enrichment status and metadata
     website_scraped = Column(Boolean, default=False)
     apollo_searched = Column(Boolean, default=False)
     apollo_enriched = Column(Boolean, default=False)
+    apollo_news_searched = Column(Boolean, default=False)
+    apollo_contacts_found = Column(Boolean, default=False)
     enrichment_status = Column(
         String(50), default="pending"
     )  # pending, in_progress, completed, failed
+    apollo_credits_used = Column(Integer, default=0)
     error_message = Column(Text)
 
     # Timestamps

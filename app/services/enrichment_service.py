@@ -227,26 +227,30 @@ class EnrichmentService:
             return {"website_scraped": False, "website_error": error_msg}
 
     async def _search_and_enrich_with_apollo(self, organization: Organization) -> Dict:
-        """Search for organization and enrich using Apollo.io."""
+        """Search for organization and enrich using comprehensive Apollo.io APIs."""
         try:
-            logger.info(
-                f"Searching and enriching with Apollo.io for {organization.name}"
-            )
+            logger.info(f"Comprehensive Apollo enrichment for {organization.name}")
 
-            # Use the new search and enrich method
-            apollo_result = await self.apollo_service.search_and_enrich_organization(
-                organization_name=organization.name
+            # Use the comprehensive enrichment method
+            apollo_result = (
+                await self.apollo_service.comprehensive_organization_enrichment(
+                    organization_name=organization.name,
+                    include_news=True,
+                    include_contacts=True,
+                )
             )
 
             if apollo_result.get("success"):
                 return {
-                    "apollo_searched": True,
+                    "apollo_searched": len(apollo_result.get("search_results", [])) > 0,
                     "apollo_enriched": apollo_result.get("enriched_data") is not None,
                     "apollo_data": apollo_result,
                     "apollo_credits_used": apollo_result.get("total_credits_used", "0"),
                 }
             else:
-                error_msg = f"Apollo search/enrichment failed: {apollo_result.get('error', 'Unknown error')}"
+                error_msg = f"Apollo comprehensive enrichment failed: {apollo_result.get('error', 'Unknown error')}"
+                if apollo_result.get("errors"):
+                    error_msg += f"; Errors: {'; '.join(apollo_result['errors'])}"
                 logger.warning(error_msg)
                 return {
                     "apollo_searched": False,
@@ -255,7 +259,7 @@ class EnrichmentService:
                 }
 
         except Exception as e:
-            error_msg = f"Apollo search/enrichment error: {str(e)}"
+            error_msg = f"Apollo comprehensive enrichment error: {str(e)}"
             logger.error(error_msg)
             return {
                 "apollo_searched": False,
@@ -266,7 +270,7 @@ class EnrichmentService:
     def _determine_website_url_from_apollo_or_fallback(
         self, organization: Organization, apollo_result: Dict
     ) -> Optional[str]:
-        """Determine website URL from Apollo data or fallback to existing logic."""
+        """Determine website URL from comprehensive Apollo data or fallback to existing logic."""
         # Try to get website from Apollo enriched data first
         if apollo_result.get("apollo_data") and apollo_result["apollo_data"].get(
             "enriched_data"
@@ -277,15 +281,27 @@ class EnrichmentService:
             elif enriched_data.get("primary_domain"):
                 return f"https://{enriched_data['primary_domain']}"
 
+        # Try to get website from Apollo organization data
+        if apollo_result.get("apollo_data") and apollo_result["apollo_data"].get(
+            "organization_data"
+        ):
+            org_data = apollo_result["apollo_data"]["organization_data"]
+            if org_data.get("website_url"):
+                return org_data["website_url"]
+            elif org_data.get("primary_domain"):
+                return f"https://{org_data['primary_domain']}"
+
         # Try to get website from Apollo search results
         if apollo_result.get("apollo_data") and apollo_result["apollo_data"].get(
-            "best_match"
+            "search_results"
         ):
-            best_match = apollo_result["apollo_data"]["best_match"]
-            if best_match.get("website_url"):
-                return best_match["website_url"]
-            elif best_match.get("primary_domain"):
-                return f"https://{best_match['primary_domain']}"
+            search_results = apollo_result["apollo_data"]["search_results"]
+            if search_results and len(search_results) > 0:
+                best_match = search_results[0]
+                if best_match.get("website_url"):
+                    return best_match["website_url"]
+                elif best_match.get("primary_domain"):
+                    return f"https://{best_match['primary_domain']}"
 
         # Fallback to existing logic
         return self._determine_website_url(organization)
@@ -310,21 +326,73 @@ class EnrichmentService:
             enrichment.contact_info = website_data.get("contact_info", [])
             enrichment.recent_news = website_data.get("recent_news", [])
 
-        # Store Apollo data
+        # Store Apollo data with comprehensive structure
         if results.get("apollo_data"):
             apollo_data = results["apollo_data"]
-            # Handle new Apollo data structure
-            enrichment.apollo_company_data = apollo_data.get(
-                "enriched_data", {}
-            ) or apollo_data.get("best_match", {})
-            enrichment.apollo_contacts = apollo_data.get("key_contacts", [])
+            # Store comprehensive Apollo data
+            company_data = {}
+
+            # Prioritize enriched data, then organization data, then search results
+            if apollo_data.get("enriched_data"):
+                company_data = apollo_data["enriched_data"]
+            elif apollo_data.get("organization_data"):
+                company_data = apollo_data["organization_data"]
+            elif (
+                apollo_data.get("search_results")
+                and len(apollo_data["search_results"]) > 0
+            ):
+                company_data = apollo_data["search_results"][0]
+
+            # Store in enrichment table
+            enrichment.apollo_company_data = company_data
+            enrichment.apollo_contacts = apollo_data.get("contacts", [])
+            enrichment.apollo_news_articles = apollo_data.get("news_articles", [])
+            enrichment.apollo_search_results = apollo_data.get("search_results", [])
+            enrichment.apollo_news_searched = (
+                len(apollo_data.get("news_articles", [])) > 0
+            )
+            enrichment.apollo_contacts_found = len(apollo_data.get("contacts", [])) > 0
+            enrichment.apollo_credits_used = int(
+                apollo_data.get("total_credits_used", "0")
+            )
+
+            # Store enrichment metadata
+            enrichment.apollo_enrichment_metadata = {
+                "credits_used": apollo_data.get("total_credits_used", "0"),
+                "errors": apollo_data.get("errors", []),
+                "search_count": len(apollo_data.get("search_results", [])),
+                "contacts_count": len(apollo_data.get("contacts", [])),
+                "news_count": len(apollo_data.get("news_articles", [])),
+                "enrichment_timestamp": datetime.utcnow().isoformat(),
+            }
+
+            # Store news articles in recent_news if available
+            if apollo_data.get("news_articles"):
+                # Combine existing recent_news with Apollo news
+                existing_news = enrichment.recent_news or []
+                apollo_news = [
+                    {
+                        "title": article.get("title", ""),
+                        "url": article.get("url", ""),
+                        "published_date": article.get("published_at", ""),
+                        "snippet": article.get("snippet", ""),
+                        "source": "Apollo News Search",
+                    }
+                    for article in apollo_data["news_articles"]
+                ]
+                enrichment.recent_news = existing_news + apollo_news
+
+            # Update organization table with Apollo data
+            self._update_organization_with_apollo_data(
+                enrichment.organization, company_data
+            )
 
         # Store errors if any
         if results.get("errors"):
             enrichment.error_message = "; ".join(results["errors"])
 
     def get_enriched_data(self, organization_id: int) -> Optional[Dict]:
-        """Get enriched data for an organization."""
+        """Get enriched data for an organization with comprehensive Apollo data."""
         enrichment = (
             self.db.query(OrganizationEnrichment)
             .filter(OrganizationEnrichment.organization_id == organization_id)
@@ -333,6 +401,21 @@ class EnrichmentService:
 
         if not enrichment:
             return None
+
+        # Extract key metrics from Apollo data for easy access
+        apollo_data = enrichment.apollo_company_data or {}
+        company_metrics = {
+            "revenue": apollo_data.get("estimated_num_employees"),
+            "employees": apollo_data.get("estimated_num_employees"),
+            "industry": apollo_data.get("industry"),
+            "keywords": apollo_data.get("keywords", []),
+            "technologies": apollo_data.get("technologies", []),
+            "founded_year": apollo_data.get("founded_year"),
+            "phone": apollo_data.get("phone"),
+            "linkedin_url": apollo_data.get("linkedin_url"),
+            "twitter_url": apollo_data.get("twitter_url"),
+            "facebook_url": apollo_data.get("facebook_url"),
+        }
 
         return {
             "enrichment_id": enrichment.id,
@@ -346,12 +429,71 @@ class EnrichmentService:
             "leadership_info": enrichment.leadership_info or [],
             "contact_info": enrichment.contact_info or [],
             "recent_news": enrichment.recent_news or [],
-            "apollo_company_data": enrichment.apollo_company_data or {},
+            "apollo_company_data": apollo_data,
             "apollo_contacts": enrichment.apollo_contacts or [],
+            "company_metrics": company_metrics,
             "error_message": enrichment.error_message,
             "created_at": enrichment.created_at,
             "updated_at": enrichment.updated_at,
         }
+
+    def _update_organization_with_apollo_data(
+        self, organization: Organization, apollo_data: Dict
+    ):
+        """Update organization record with Apollo enrichment data."""
+        if not apollo_data:
+            return
+
+        try:
+            # Update Apollo-specific fields
+            if apollo_data.get("id"):
+                organization.apollo_id = str(apollo_data["id"])
+
+            if apollo_data.get("primary_domain"):
+                organization.primary_domain = apollo_data["primary_domain"]
+
+            if apollo_data.get("website_url"):
+                organization.website_url = apollo_data["website_url"]
+
+            if apollo_data.get("industry"):
+                organization.industry = apollo_data["industry"]
+
+            if apollo_data.get("estimated_num_employees"):
+                organization.estimated_num_employees = apollo_data[
+                    "estimated_num_employees"
+                ]
+
+            if apollo_data.get("annual_revenue"):
+                organization.annual_revenue = apollo_data["annual_revenue"]
+
+            if apollo_data.get("founded_year"):
+                organization.founded_year = apollo_data["founded_year"]
+
+            if apollo_data.get("phone"):
+                organization.phone = apollo_data["phone"]
+
+            if apollo_data.get("linkedin_url"):
+                organization.linkedin_url = apollo_data["linkedin_url"]
+
+            if apollo_data.get("twitter_url"):
+                organization.twitter_url = apollo_data["twitter_url"]
+
+            if apollo_data.get("facebook_url"):
+                organization.facebook_url = apollo_data["facebook_url"]
+
+            if apollo_data.get("keywords"):
+                organization.keywords = apollo_data["keywords"]
+
+            if apollo_data.get("technologies"):
+                organization.technologies = apollo_data["technologies"]
+
+            # Update Apollo last updated timestamp
+            organization.apollo_last_updated = datetime.utcnow()
+
+            logger.info(f"Updated organization {organization.name} with Apollo data")
+
+        except Exception as e:
+            logger.error(f"Error updating organization with Apollo data: {e}")
 
     async def close(self):
         """Close external service connections."""

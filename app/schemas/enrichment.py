@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 
 
@@ -22,8 +22,12 @@ class ContactInfo(BaseModel):
 class RecentNews(BaseModel):
     """Schema for recent news/grants."""
 
-    type: str
-    description: str
+    title: Optional[str] = None
+    type: Optional[str] = None
+    description: Optional[str] = None
+    url: Optional[str] = None
+    published_date: Optional[str] = None
+    snippet: Optional[str] = None
     source: str
 
 
@@ -40,20 +44,44 @@ class ApolloContact(BaseModel):
 
 
 class ApolloCompanyData(BaseModel):
-    """Schema for Apollo company data."""
+    """Schema for comprehensive Apollo company data."""
 
+    id: Optional[str] = None
     name: Optional[str] = None
-    domain: Optional[str] = None
+    primary_domain: Optional[str] = None
+    website_url: Optional[str] = None
     industry: Optional[str] = None
-    employee_count: Optional[int] = None
-    revenue: Optional[str] = None
+    estimated_num_employees: Optional[int] = None
+    annual_revenue: Optional[float] = None
     founded_year: Optional[int] = None
+    phone: Optional[str] = None
+    linkedin_url: Optional[str] = None
+    twitter_url: Optional[str] = None
+    facebook_url: Optional[str] = None
+    keywords: Optional[List[str]] = []
+    technologies: Optional[List[str]] = []
     headquarters_address: Optional[str] = None
     description: Optional[str] = None
+    logo_url: Optional[str] = None
+
+
+class CompanyMetrics(BaseModel):
+    """Schema for extracted company metrics."""
+
+    revenue: Optional[int] = None
+    employees: Optional[int] = None
+    industry: Optional[str] = None
+    keywords: Optional[List[str]] = []
+    technologies: Optional[List[str]] = []
+    founded_year: Optional[int] = None
+    phone: Optional[str] = None
+    linkedin_url: Optional[str] = None
+    twitter_url: Optional[str] = None
+    facebook_url: Optional[str] = None
 
 
 class EnrichmentResponse(BaseModel):
-    """Response schema for enrichment data."""
+    """Response schema for comprehensive enrichment data."""
 
     enrichment_id: int
     organization_id: int
@@ -66,8 +94,9 @@ class EnrichmentResponse(BaseModel):
     leadership_info: List[LeadershipInfo] = []
     contact_info: List[ContactInfo] = []
     recent_news: List[RecentNews] = []
-    apollo_company_data: Optional[ApolloCompanyData] = None
+    apollo_company_data: Optional[Dict[str, Any]] = {}
     apollo_contacts: List[ApolloContact] = []
+    company_metrics: Optional[CompanyMetrics] = None
     error_message: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
@@ -100,6 +129,9 @@ class EnrichmentSummary(BaseModel):
     website_scraped: int
     apollo_searched: int
     apollo_enriched: int
+    apollo_news_searched: int
+    apollo_contacts_found: int
     failed: int
     pending: int
     in_progress: int
+    total_apollo_credits_used: int

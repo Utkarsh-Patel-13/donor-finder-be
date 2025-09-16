@@ -34,11 +34,3 @@ async def get_organization_details(ein: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Organization not found")
 
     return organization
-
-
-@router.get("/state/{state}", response_model=List[Organization])
-async def get_organizations_by_state(state: str, db: Session = Depends(get_db)):
-    """Get all organizations in a specific state."""
-    db_service = DatabaseService(db)
-    organizations = db_service.get_organizations_by_state(state.upper())
-    return organizations

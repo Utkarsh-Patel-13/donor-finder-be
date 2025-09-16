@@ -48,7 +48,6 @@ async def semantic_search_organizations(
 
     Examples:
     - "foundations supporting early childhood education in California"
-    - "environmental organizations in New York"
     - "disaster relief nonprofits"
     - "youth development programs"
     """
@@ -87,7 +86,7 @@ async def semantic_search_organizations(
                 )
                 search_results.append(search_result)
 
-        else:  # hybrid (default)
+        else:  # hybrid
             # Hybrid search combining semantic and keyword
             results = db_service.hybrid_search_organizations(
                 query=q, state=state, subseccd=subseccd, limit=limit
@@ -110,56 +109,6 @@ async def semantic_search_organizations(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
-
-
-@router.get("/suggest")
-async def get_search_suggestions(
-    db: Session = Depends(get_db),
-    q: str = Query(..., description="Partial query for suggestions"),
-):
-    """Get search suggestions based on NTEE categories and common terms."""
-    ntee_service = NTEEService()
-
-    # Extract potential components from partial query
-    query_components = ntee_service.extract_query_components(q)
-
-    suggestions = {"cause_areas": [], "geographic": [], "organization_types": []}
-
-    # Suggest cause areas based on partial matches
-    common_causes = [
-        "education",
-        "early childhood education",
-        "health",
-        "mental health",
-        "environmental conservation",
-        "arts and culture",
-        "disaster relief",
-        "youth development",
-        "elderly services",
-        "homeless services",
-        "animal welfare",
-        "civil rights",
-        "community development",
-    ]
-
-    q_lower = q.lower()
-    for cause in common_causes:
-        if q_lower in cause or cause.startswith(q_lower):
-            suggestions["cause_areas"].append(cause)
-
-    # Suggest geographic terms
-    common_states = ["California", "New York", "Texas", "Florida", "Illinois"]
-    for state in common_states:
-        if q_lower in state.lower() or state.lower().startswith(q_lower):
-            suggestions["geographic"].append(state)
-
-    # Suggest organization types
-    org_types = ["foundation", "nonprofit", "charity", "organization"]
-    for org_type in org_types:
-        if q_lower in org_type or org_type.startswith(q_lower):
-            suggestions["organization_types"].append(org_type)
-
-    return suggestions
 
 
 @router.post("/update-embeddings", response_model=EmbeddingUpdateResponse)
@@ -187,52 +136,3 @@ async def update_embeddings(
         raise HTTPException(
             status_code=500, detail=f"Embedding update failed: {str(e)}"
         )
-
-
-@router.get("/explain")
-async def explain_search_query(
-    q: str = Query(..., description="Query to explain"),
-):
-    """Explain how a search query would be processed."""
-    ntee_service = NTEEService()
-
-    # Parse query components
-    components = ntee_service.extract_query_components(q)
-
-    # Generate example searchable text
-    sample_org = {
-        "name": "Sample Organization",
-        "ntee_code": "B21" if "education" in q.lower() else "P20",
-        "subseccd": 3,
-        "city": "San Francisco",
-        "state": "CA",
-    }
-
-    example_searchable_text = ntee_service.build_searchable_text(sample_org)
-
-    explanation = {
-        "original_query": q,
-        "detected_components": components,
-        "search_strategy": {
-            "semantic_matching": "Query will be converted to embedding and compared with organization embeddings",
-            "geographic_filters": f"State filter: {components['geographic']}"
-            if components["geographic"]
-            else "No geographic filter detected",
-            "cause_area_filters": f"NTEE codes: {components['cause_areas']}"
-            if components["cause_areas"]
-            else "No specific cause areas detected",
-            "hybrid_approach": "Results will combine semantic similarity with keyword matching",
-        },
-        "example_organization_text": {
-            "sample_org": sample_org,
-            "searchable_text": example_searchable_text,
-        },
-        "tips": [
-            "Be specific about cause areas (e.g., 'early childhood education' vs 'education')",
-            "Include geographic terms (e.g., 'California', 'San Francisco Bay Area')",
-            "Use descriptive terms (e.g., 'disaster relief' vs 'emergency')",
-            "Try different phrasings if initial results aren't relevant",
-        ],
-    }
-
-    return explanation

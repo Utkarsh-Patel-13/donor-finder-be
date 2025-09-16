@@ -57,7 +57,6 @@ class FirecrawlService:
                 timeout=30000,
             )
 
-            # Firecrawl v2 returns a Document object directly
             if hasattr(scrape_result, "markdown"):
                 # Direct Document object
                 markdown_content = scrape_result.markdown or ""

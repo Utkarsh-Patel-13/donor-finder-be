@@ -19,6 +19,7 @@ if config.config_file_name is not None:
 from app.models.database import Base
 from app.models.organization import Organization
 from app.models.filing import Filing
+from app.models.enrichment import OrganizationEnrichment
 
 target_metadata = Base.metadata
 

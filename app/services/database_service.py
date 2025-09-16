@@ -87,10 +87,6 @@ class DatabaseService:
         """Get organization by EIN."""
         return self.db.query(Organization).filter(Organization.ein == ein).first()
 
-    def get_organizations_by_state(self, state: str) -> List[Organization]:
-        """Get organizations by state."""
-        return self.db.query(Organization).filter(Organization.state == state).all()
-
     def search_organizations(
         self,
         query: Optional[str] = None,
@@ -148,9 +144,7 @@ class DatabaseService:
             db_query = db_query.filter(Organization.ntee_code.in_(ntee_codes))
 
         # Get all candidates (we'll filter by similarity after)
-        candidates = db_query.limit(
-            1000
-        ).all()  # Reasonable limit for vector comparison
+        candidates = db_query.limit(1000).all()
 
         if not candidates:
             return []
@@ -181,7 +175,6 @@ class DatabaseService:
         # Parse query for components
         query_components = self.ntee_service.extract_query_components(query)
 
-        # Get semantic search results (don't apply NTEE filters for broader semantic matching)
         semantic_results = self.semantic_search_organizations(
             query=query,
             state=state
@@ -191,7 +184,7 @@ class DatabaseService:
                 else None
             ),
             subseccd=subseccd,
-            ntee_codes=None,  # Don't filter by NTEE codes in semantic search
+            ntee_codes=None,
             limit=limit,
         )
 
